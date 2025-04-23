@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Page Assistant",
+  "version": "1.0.0",
+  "description": "AI‐powered assistant on any webpage",
+  "permissions": ["identity", "storage", "activeTab", "contextMenus", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "oauth2": {
+    "client_id": "<YOUR_GOOGLE_CLIENT_ID>.apps.googleusercontent.com",
+    "scopes": ["openid", "email", "profile"]
+  },
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html" }
+}
