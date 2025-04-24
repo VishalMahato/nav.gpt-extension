@@ -1,49 +1,47 @@
+// background.js
 /// <reference types="chrome" />
-import { generatePkcePair } from './utils/pkce';
+import { generatePkcePair } from './utils/pkce'
 
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg === 'LOGIN') startOAuth();
-});
+  if (msg === 'LOGIN') startOAuthFlow()
+})
 
-async function startOAuth() {
-  const { verifier, challenge } = await generatePkcePair();
-  await chrome.storage.local.set({ pkce_verifier: verifier });
+async function startOAuthFlow() {
+  const clientId    = '16023198665-7m68ug4os70t0gba5i4cs7obkmrnm9qr.apps.googleusercontent.com'
+  const redirectUri = 'http://localhost:8787/auth/callback'
 
-  const clientId = '<YOUR_GOOGLE_CLIENT_ID>.apps.googleusercontent.com';
-  const redirectUri = chrome.identity.getRedirectURL();
+  // 1) Make PKCE pair
+  const { verifier, challenge } = await generatePkcePair()
+
+  // 2) Pack verifier into `state`
+  const state = encodeURIComponent(btoa(JSON.stringify({ verifier })))
+
+  // 3) Build Google auth URL
   const params = new URLSearchParams({
-    client_id: clientId,
-    response_type: 'code',
-    redirect_uri: redirectUri,
-    scope: 'openid email profile',
-    code_challenge: challenge,
+    client_id:             clientId,
+    response_type:         'code',
+    redirect_uri:          redirectUri,
+    scope:                 'openid email profile',
+    code_challenge:        challenge,
     code_challenge_method: 'S256',
-    prompt: 'select_account'
-  });
+    prompt:                'select_account',
+    state,
+  })
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
 
+  // 4) Launch the OAuth popup
   chrome.identity.launchWebAuthFlow(
-    { url: `https://accounts.google.com/o/oauth2/v2/auth?${params}`, interactive: true },
-    async (callbackUrl) => {
-      if (chrome.runtime.lastError || !callbackUrl) return;
-      const code = new URL(callbackUrl).searchParams.get('code')!;
-      const { pkce_verifier } = await chrome.storage.local.get('pkce_verifier');
-      const resp = await fetch('https://your-domain.com/auth/callback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code,
-          code_verifier: pkce_verifier,
-          redirect_uri: redirectUri,
-          client_id: clientId
-        })
-      });
-      const tokens = await resp.json();
-      await chrome.storage.local.set(tokens);
-      // Extract email from ID token
-      if (tokens.id_token) {
-        const payload = JSON.parse(atob(tokens.id_token.split('.')[1]));
-        await chrome.storage.local.set({ user_email: payload.email });
+    { url: authUrl, interactive: true },
+    redirectedTo => {
+      if (chrome.runtime.lastError || !redirectedTo) {
+        console.error('OAuth error', chrome.runtime.lastError)
+        return
       }
+      // You will see the full callback URL here, but we let the backend handle code+state.
+      console.log('Redirected to:', redirectedTo)
+      // Optionally fetch your backend here to get tokens:
+      // fetch('http://localhost:8787/auth/callback?'+new URL(redirectedTo).search)
+      //   .then(r=>r.json()).then(console.log)
     }
-  );
+  )
 }
